@@ -10,7 +10,8 @@ from agent.planner import plan
 from agent.decision import choose_tool
 from agent.tools import general_tool, tech_tool
 from agent.state import State
-from agent.reflection import reflect, ReflectionDecision
+from agent.reflection import reflect
+
 
 # 工具注册表：Agent 只“选择”，不关心工具内部实现
 TOOL_MAP = {
@@ -63,25 +64,35 @@ def run_agent(task: str) -> str:
         # 保存原始执行结果（无论好坏）
         state.save(step, result)
 
-        final_output += result["content"] + "\n"
+        final_output += result.get("content", "") + "\n"
 
         # -------------------------------------------------
         # 【Reflection Layer｜反思层】
         # - 比较「结果 vs 目标预期」
-        # - 决定是否需要 Retry / 补充 / 停止
+        # - 给出质量评估与改进建议
         # -------------------------------------------------
         reflection = reflect(step, result, state)
+        state.record(
+    step=step,
+    tool=tool_name,
+    is_success=reflection.is_success
+)
 
-        if reflection.decision == ReflectionDecision.RETRY:
-            print("→ 反思结果：需要重试或补充信息")
-            # 这里暂时不实现 retry，只留下结构钩子
-            # 企业项目中通常会在此触发二次 Decision
+        print(
+            f"[Reflection] success={reflection.is_success} "
+            f"confidence={reflection.confidence:.2f} "
+            f"retry={reflection.should_retry} "
+            f"reason={reflection.reason}"
+        )
 
-        elif reflection.decision == ReflectionDecision.CONTINUE:
-            print("→ 反思结果：可以进入下一步")
-
-        elif reflection.decision == ReflectionDecision.STOP:
-            print("→ 反思结果：任务已满足，提前终止")
-            break
+        # Reflection 不“下命令”，Agent 自己决定控制流
+        if reflection.should_retry:
+            print("→ Reflection 建议重试，Agent 将在后续步骤中调整决策")
+            # 这里暂不实现 retry，仅保留结构钩子
+            # 企业工程中通常会在此触发：
+            # - 二次 Decision
+            # - 或标记失败经验
+        else:
+            print("→ Reflection 认为结果可接受，继续下一步")
 
     return final_output
