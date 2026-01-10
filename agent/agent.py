@@ -72,11 +72,21 @@ def run_agent(task: str) -> str:
         # - 给出质量评估与改进建议
         # -------------------------------------------------
         reflection = reflect(step, result, state)
+
+        # 将 reflection 的结构化结果应用到 State（唯一经验入口）
+        try:
+            state.apply_reflection(step, tool_name, reflection)
+        except Exception:
+            # 记录失败不应影响主流程，保持鲁棒性
+            pass
+
+        # 兼容旧接口：保留原有的 record 以记录历史条目
         state.record(
-    step=step,
-    tool=tool_name,
-    is_success=reflection.is_success
-)
+            step=step,
+            tool=tool_name,
+            is_success=reflection.is_success,
+            reason=reflection.reason if hasattr(reflection, "reason") else "",
+        )
 
         print(
             f"[Reflection] success={reflection.is_success} "

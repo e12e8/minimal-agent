@@ -1,47 +1,49 @@
 # decision.py
-# Decision = 决策层
-# 职责：根据 Step + State，选择当前最合适的 Tool
-# ⚠️ 不执行 Tool，不关心结果，只做“策略选择”
+# =========================================================
+# 决策层 Decision
+# 职责：
+# - 只读信息：Step + State
+# - 不执行工具
+# - 计算每个候选工具的分数
+# - 输出“最优工具选择”
+# =========================================================
 
 from agent.state import State
 
 
 def choose_tool(step: str, state: State) -> str:
     """
-    根据当前 step 和历史 state，选择最优工具
+    根据当前 Step 和 State，选择最合适的工具。
 
-    策略（工程可解释）：
-    - 连续成功（streak）权重最高
-    - 失败次数是强烈惩罚
+    评分规则（可解释）：
+    - 成功次数带正权重（信任累积）
+    - 失败次数带惩罚权重（避免不稳定工具）
+    - streak 反映连续性（正为连续成功，负为连续失败）
+    - 简单的 Step 关键词匹配可微调偏好
     """
 
-    # 当前 Agent 支持的工具集合（可扩展）
+    # 候选工具：保持与 agent.TOOL_MAP 中注册的工具一致
     candidate_tools = ["general", "tech"]
 
-    scored_tools = []
-
+    scores = []
     for tool in candidate_tools:
         exp = state.get_experience(step, tool)
 
-        # 基础分：没有历史就从 0 开始
-        score = 0
+        # 基础分数（可调权重）
+        score = 0.0
+        score += exp.get("success", 0) * 2.0       # 成功次数加权
+        score -= exp.get("failure", 0) * 1.5       # 失败次数惩罚
+        score += exp.get("streak", 0) * 1.0        # 连续性影响（正/负）
 
-        if exp:
-            # 连续成功是“信任建立”的核心
-            score += exp["streak"] * 2
+        # 简单的 Step-工具相关性偏好
+        if "技术" in step and tool == "tech":
+            score += 1.0
 
-            # 失败是强惩罚（工程上避免不稳定工具）
-            score -= exp["failure"] * 3
+        scores.append((score, tool))
 
-        scored_tools.append((score, tool))
+    # 按分数排序并选择最高分工具
+    scores.sort(reverse=True, key=lambda x: x[0])
+    best_score, best_tool = scores[0]
 
-    # 按 score 从高到低排序
-    scored_tools.sort(reverse=True, key=lambda x: x[0])
-
-    # 返回得分最高的工具
-    selected_tool = scored_tools[0][1]
-
-    # 调试输出（强烈建议保留，面试可演示）
-    print(f"[Decision] Step='{step}' Tool Scores={scored_tools} → 选择 {selected_tool}")
-
-    return selected_tool
+    print(f"[Decision] Step='{step}' Tool Scores={scores} → 选择 {best_tool}")
+    return best_tool
